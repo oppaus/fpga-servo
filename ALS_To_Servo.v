@@ -9,7 +9,7 @@
 // Project Name: 
 // Target Devices: Basys 3
 // Tool Versions: 
-// Description: Top-Level module for Ambient Light Sensor Project (ALS)
+// Description: Top-Level module for Light Sensor To Servo control
 // SPI operates at 2.5MHz, CPHA = 1, CPOL = 1
 // Interfaces to the Digilent Pmod ALS chip via SPI. Receives 2 bytes from the 
 // PMOD board. Data comes spread across 2 bytes, for whatever reason.
@@ -26,20 +26,22 @@
 //////////////////////////////////////////////////////////////////////////////////
 
 
-module Light_Sensor_ALS(
-    // System clock, Reset (ButnC)
-    input clk, reset,
+module ALS_To_Servo (
+    // System clock, Reset (ButnC), enable con3 (switch 15)
+    input clk, reset, enable,
+    input [2:0] sw,
     
     // 7-Segment Display
     output [6:0] seg,
     output [3:0] an,
     
     // PMOD SPI Interface
-    inout [3:0] JB
+    inout [3:0] JB,
     // output JB[0] pin 1 (~CS, Chip Select, Active Low)
     // output JB[1] pin 2 (MOSI), not connected (NC) for ALS, TODO: problematic?
     // input  JB[2] pin 3 (MISO)
     // output JB[3] pin 4 (SCLK)
+    output servo0 // servo
     );
     
     // Clock phase (CPHA) and Clock polarity (CPOL) are both 1
@@ -69,7 +71,6 @@ module Light_Sensor_ALS(
     wire [7:0]  w_Ambient_Val;
     reg  [15:0] r_ADC_Word;
     
-    // TODO: better understand this logic
     assign w_Rst_L = ~reset;
     
     SPI_Master_With_Single_CS
@@ -96,9 +97,15 @@ module Light_Sensor_ALS(
     // SPI Interfaces
     .o_SPI_Clk(JB[3]),
     .i_SPI_MISO(JB[2]),
-    .o_SPI_MOSI(JB[1]), // TODO: Unsure an NC pin is the right assignment here
+    .o_SPI_MOSI(JB[1]),
     .o_SPI_CS_n(JB[0])
     );
+    
+    // instantiate the con3 controller
+    wire clk_256kHz;
+    reg [7:0] angle;
+    con3_clk_gen uut_clkgen(clk, rst, clk_256kHz);
+    con3 (.clk(clk), .rst(rst), .clk_256kHz(clk_256kHz), .en(enable), .servo(servo0), .angle(angle));
     
     // Handle read requests from ADC as often as possible, 'pulses' 
     // data valid (DV) to let PMOD know it can drive more data to master.
@@ -135,4 +142,9 @@ module Light_Sensor_ALS(
     assign an[3:0] = {4{0}};
     assign seg[6:0] = {7{!r_LED_Enable}};
     
-endmodule // Light_Sensor_ALS
+    always @ (posedge clk)
+    begin
+      angle <= w_Ambient_Val;
+    end
+    
+endmodule // ALS_To_Servo
