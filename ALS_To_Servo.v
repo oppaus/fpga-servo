@@ -5,17 +5,16 @@
 // 
 // Create Date: 10/06/2025 12:58:31 PM
 // Design Name: 
-// Module Name: Light_Sensor_ALS
+// Module Name: ALS_To_Servo
 // Project Name: 
 // Target Devices: Basys 3
-// Tool Versions: 
+// Tool Versions: Vivado 2024.2
 // Description: Top-Level module for Light Sensor To Servo control
-// SPI operates at 2.5MHz, CPHA = 1, CPOL = 1
-// Interfaces to the Digilent Pmod ALS chip via SPI. Receives 2 bytes from the 
-// PMOD board. Data comes spread across 2 bytes, for whatever reason.
-//                 MSB                       LSB
-// Index  7  6  5  4  3  2  1  0  | 7  6  5  4  3  2  1  0 
-// Data   0  0  0  D7 D6 D5 D4 D3 | D2 D1 D0 0  0  0  0  Z
+// 
+// Building on the previous light-sensor project, this connects a server that can
+// be controlled by the light sensor. Using a forked repo to get some verilog that
+// can drive the pmodcon3 board, the data obtained from the light sensor (0-255)
+// is passed to the motor as an angle.
 //
 // Dependencies: 
 // 
@@ -105,7 +104,7 @@ module ALS_To_Servo (
     wire clk_256kHz;
     reg [7:0] angle;
     con3_clk_gen uut_clkgen(clk, rst, clk_256kHz);
-    con3 (.clk(clk), .rst(rst), .clk_256kHz(clk_256kHz), .en(enable), .servo(servo0), .angle(angle));
+    con3_v2 (.clk(clk), .rst(rst), .clk_256kHz(clk_256kHz), .en(enable), .servo(servo0), .angle(angle));
     
     // Handle read requests from ADC as often as possible, 'pulses' 
     // data valid (DV) to let PMOD know it can drive more data to master.
@@ -132,19 +131,31 @@ module ALS_To_Servo (
     // duty cycle (fraction of 'on' time). When the ambient value is high,
     // r_LED_Count is mostly less then w_Ambient_Val, setting r_LED_Enable
     // to 1 (true or on), which then gets inverted low for illumination.
-    always @ (posedge clk)
-    begin
-      r_LED_Count <= r_LED_Count + 1;
-      r_LED_Enable <= (r_LED_Count < w_Ambient_Val);
-    end
+//    always @ (posedge clk)
+//    begin
+//      r_LED_Count <= r_LED_Count + 1;
+//      r_LED_Enable <= (r_LED_Count < w_Ambient_Val);
+//    end
     
     // light up all four
-    assign an[3:0] = {4{0}};
-    assign seg[6:0] = {7{!r_LED_Enable}};
+    //assign an[3:0] = {4{0}};
+   //assign seg[6:0] = {7{!r_LED_Enable}};
+    
+    wire [3:0] digit1, digit0;
+    
+    assign {digit1, digit0} = w_Ambient_Val;
+
+    ssdController2 ssd(clk, rst, 2'b11, digit1, digit0, seg, an[1:0]);
     
     always @ (posedge clk)
     begin
-      angle <= w_Ambient_Val;
+      case (sw)
+        3'b001 : angle <= 255;
+        3'b010 : angle <= 128;
+        3'b100 : angle <= 50;
+        default: angle <= w_Ambient_Val;
+      endcase
+      
     end
     
 endmodule // ALS_To_Servo
